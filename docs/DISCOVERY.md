@@ -390,20 +390,62 @@ manual's enemy bikes / arrow signs / cones / ramps, and its consumer
 (`sub0_AF3D`/`ObjKindSwitch`) resets a per-kind state cell on change. This
 is the thread that led to the answer on banks 3 and 4, below.
 
-### Bank 3 and 4: found -- object data, not per-track data
+### Bank 3 and 4: per-track after all -- a correction to this session's
+### own first answer
 
-The per-track guess was reasonable and wrong. `dat_C2EA` at `f7:$C2EA` is a
-flat 4-byte table: `{$03, $03, $04, $04}`. Indexed by `ObjKind` (0-3) at
-`sub_DB65`/`sub_DBC1`, it names which bank to switch to before reading that
-object's data -- so **kinds 0 and 1 live in bank 3, kinds 2 and 3 in bank
-4**. Two obstacle types per bank, out of the manual's four (enemy bike,
-arrow sign, cone, ramp).
+The first pass through this data named `ram_0192` `ObjKind`, on the
+strength of `AND #$03` (four values) matching the manual's four obstacle
+kinds. Screenshots proved that wrong within the same session.
 
-That is also the reason neither bank was ever a `JMP` target across two
-full-track recordings: their content is read with plain absolute-indexed
-`LDA`, addressed from code that lives entirely in bank 7, never entered as
-code in its own right. The probe result from last session was correct and
-this explains *why* rather than changing it.
+Watching `ram_0192` live across `run-02` (three tracks) found only four
+changes in 23,985 frames -- at frame 527, frames 12553 and 12580 close
+together, and frame 18218. Not the rate of an obstacle indicator during
+continuous driving; the rate of something that changes between races.
+Screenshotting each transition settled it: all of them land on the same
+screen, the **track select screen**, four tiles labelled 1-4 exactly as
+in the manual. `ram_0192` is renamed `TrackSelect`.
+
+So `dat_C2EA` at `f7:$C2EA` -- `{$03, $03, $04, $04}` -- is a **per-track**
+bank table after all, the guess two sessions ago got right the first time:
+tracks 0 and 1's data live in bank 3, tracks 2 and 3's in bank 4, two
+tracks sharing each bank. `sub0_AF3D` (`TrackSelectChanged`) resets
+per-track state (`ram_26D9,X`/`TrackSelectState`) when the selection
+changes, at `AF3D`/`AF47`.
+
+The reason neither bank is ever a `JMP` target still holds regardless of
+which reading is right: their content is read with plain absolute-indexed
+`LDA` from code that lives entirely in bank 7, never entered as code in
+its own right.
+
+**The lesson, worth stating plainly:** a value that is technically
+consistent with a hypothesis (four obstacle kinds, `AND #$03`) is not the
+same as a value confirmed against what is actually on screen when it
+changes. The first reading was reasonable from the code alone and wrong;
+watching it live for one session was what caught it inside the same
+session rather than carrying the error into another one.
+
+### The `$7878`/`$00B0` stub: found -- part of track/object setup, not a per-frame handler
+
+Live taps answer the two questions a static read could not. `f7:C6DC` is
+reached only **4-5 times per session** (once per track load, roughly --
+run-01 has one track and 4 hits at the very end; run-02 has three tracks
+and 5, clustered at each transition). And `$00B0` genuinely is fetched as
+an opcode -- 25,844 times in one session -- so it is real, executed code,
+not a dead pointer.
+
+The caller is `sub_D9B4`/`sub_D9E4` (`f7:$D9B4`), a small loop that walks a
+table (`dat_D940`, stride 6 bytes: a 16-bit flag/count then two 16-bit
+cells) and, for each nonzero entry, installs values into `ram_004A`/`004B`
+and `ram_004C`/`004D` -- **the same two RAM-vector pairs** `f7:EC69` and
+`f7:FA44`/`FD13`/`b5:B7F7` dispatch through elsewhere. The one real row in
+that table loads `$C71E` (real bank-7 code) as one vector and `$259D` (a
+plain RAM address, not code) as the other, with a count of `$14` (20)
+alongside. `sub_C6DC`'s `JMP ($7878)`/`$00B0` stub is called from inside
+this same installer, which is why it is rare: it belongs to
+track/object-table setup at a state transition, not to the per-frame
+physics loop.
+
+What `$C71E` and the 20-count buffer at `$259D` actually do is still open.
 
 ### Bank 6: unreached, and one stale annotation caught
 

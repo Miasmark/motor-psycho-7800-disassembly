@@ -170,7 +170,7 @@
     "b0:84C8": "Ctrl2_InitResponseTimes",
     "f7:F6ED": "Player1SteerRead",
     "f7:F702": "Player1SteerScale",
-    "b0:AF3D": "ObjKindSwitch"
+    "b0:AF3D": "TrackSelectChanged"
   },
   "ram": {
     "6A": "Ctrl2_ChangedMaskLo",
@@ -192,8 +192,8 @@
     "0051": "Player1SteerScaled",
     "0155": "Player1SteerAccum",
     "014D": "Player1SteerSign",
-    "0192": "ObjKind",
-    "26D9": "ObjKindState"
+    "0192": "TrackSelect",
+    "26D9": "TrackSelectState"
   },
   "comments": {},
   "headers": {},

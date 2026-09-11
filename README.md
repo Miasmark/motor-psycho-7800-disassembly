@@ -31,16 +31,21 @@ $C000-$FFFF  fixed  -> ROM bank 7 (file offset $1C000-$1FFFF)
 **Total traced:** 16,259 bytes / 7,478 instructions (24.8%), up from 14,919.
 Reassembly is byte-identical across all six emitted spaces.
 
-Three things asked for from these recordings, all found and in
+Three things asked for from these recordings, all in
 [`docs/DISCOVERY.md`](docs/DISCOVERY.md): **player 1's steering**, a
 7-sample-per-frame `SWCHA` poll inside the NMI handler feeding a scale
-factor the response-time UI configures; **banks 3 and 4**, which turned
-out to be per-*object* data rather than per-track -- a 4-entry table names
-which bank holds which of the manual's four obstacle kinds, two per bank,
-explaining why neither is ever a jump target; and **bank 6**, confirmed
+factor the response-time UI configures; **banks 3 and 4**, confirmed
+*per-track* after a same-session correction -- a first reading called the
+selector `ObjKind` on the strength of `AND #$03` matching the manual's
+four obstacle kinds, and screenshotting every change of that cell showed
+it only ever changes on the track-select screen, so it is `TrackSelect`
+and the bank table pairs two tracks per bank; and **bank 6**, confirmed
 unreached by anything traced (the hardware vectors all point into bank 7),
 which also caught a stale annotation -- `f6:E010` was never a valid
-address inside that bank at all.
+address inside that bank at all. The `$7878`/`$00B0` self-modifying stub
+is also resolved: it belongs to a track/object-table installer
+(`sub_D9B4`), called a handful of times per session at track loads, not a
+per-frame handler.
 
 Two full-track recordings (`run-01.inp`, `run-02.inp`, all four tracks
 between them) let the nine known indirect jumps be sampled properly this
@@ -86,10 +91,10 @@ untraced bank or installed via RAM vector.
 1. Decode `Player1SteerAccum` (`$0155`) against actual steering/gear
    behaviour -- the pipeline is found, its output is not yet read as a
    number.
-2. Confirm which of the four object kinds (`ObjKind` 0-3, banks 3/4) is
-   which of the manual's enemy bike / arrow sign / cone / ramp.
-3. Bank 6 is unreached by anything traced; the one lead in is the
-   `$7878`->`$00B0` self-modifying-code stub, still open.
+2. What `$C71E` and the 20-entry buffer at `$259D` do -- the two values
+   the track/object installer sets up via the `$7878` stub.
+3. Bank 6 is unreached by anything traced, and still looks like graphics
+   data by inspection rather than being confirmed as such.
 2. Trace the DLI chain via `JMP ($004A)` / `JMP ($004C)` / `JMP ($006C)`
 3. Record gameplay to capture audio and identify untraced routines
 4. Analyze the most-referenced RAM addresses for game state
