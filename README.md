@@ -45,7 +45,13 @@ which also caught a stale annotation -- `f6:E010` was never a valid
 address inside that bank at all. The `$7878`/`$00B0` self-modifying stub
 is also resolved: it belongs to a track/object-table installer
 (`sub_D9B4`), called a handful of times per session at track loads, not a
-per-frame handler.
+per-frame handler. The HUD itself confirms `TurnResponse`/`StraightenResponse`
+outright -- it reads "STRAIGHTEN: 20" and "TURN: 10" on screen, live,
+matching those cells exactly rather than by numeric coincidence with the
+manual. And **bank 6 is confirmed graphics**, not guessed: tapping every
+read of its address range catches MARIA's own DMA the same way it would a
+CPU fetch, and across one three-track session that comes to 43.6 million
+reads touching 80% of the bank's bytes.
 
 Two full-track recordings (`run-01.inp`, `run-02.inp`, all four tracks
 between them) let the nine known indirect jumps be sampled properly this
@@ -93,8 +99,9 @@ untraced bank or installed via RAM vector.
    number.
 2. What `$C71E` and the 20-entry buffer at `$259D` do -- the two values
    the track/object installer sets up via the `$7878` stub.
-3. Bank 6 is unreached by anything traced, and still looks like graphics
-   data by inspection rather than being confirmed as such.
+3. Bank 6 is **confirmed graphics** -- MARIA's own DMA reads it 43.6
+   million times across one three-track session, 80% of its bytes
+   touched -- but nothing yet says which visual element specifically.
 2. Trace the DLI chain via `JMP ($004A)` / `JMP ($004C)` / `JMP ($006C)`
 3. Record gameplay to capture audio and identify untraced routines
 4. Analyze the most-referenced RAM addresses for game state

@@ -384,6 +384,16 @@ with 128 distinct values -- both about as active as a continuous
 steering/lean state can look, against the bank-7 mirror's one write per
 session that started this whole line of investigation.
 
+And a screenshot settles `TurnResponse`/`StraightenResponse` outright
+rather than by numeric coincidence with the manual: the HUD reads
+**"STRAIGHTEN: 20"** and **"TURN: 10"**, live, on screen, during a normal
+lap. `Player1SteerAccum` itself is confirmed active (it covers the full
+byte range over a lap, `$00`-`$CE` seen in one session) but not yet tied
+to a specific visible quantity -- the screenshot taken at its local
+maximum in `run-01` shows an unremarkable straight, so it is not a simple
+left/right lean angle on its own; it may combine with something else (gear,
+speed) before it becomes visible position. Still open.
+
 `ram_0192`/`ObjKind` was found along the way, in the same bank-0 region:
 `AND #$03` (four values) selects between four obstacle kinds, matching the
 manual's enemy bikes / arrow signs / cones / ramps, and its consumer
@@ -447,23 +457,30 @@ physics loop.
 
 What `$C71E` and the 20-count buffer at `$259D` actually do is still open.
 
-### Bank 6: unreached, and one stale annotation caught
+### Bank 6: confirmed graphics, by the most direct test there is
 
-Bank 6 (`f6`, fixed at `$4000`-`$7FFF`) shows **zero instructions reached**
-by the tracer, and a grep across every other bank's listing finds not one
-`JSR`/`JMP` operand anywhere in `$4000`-`$7FFF`. The hardware vectors,
-read straight from the ROM rather than assumed, are `RESET=$C000`,
-`NMI=$C0C2`, `IRQ=$C000` -- all in bank 7. Bank 6 has no natural entry.
+Zero instructions reached by the tracer, and no `JSR`/`JMP` operand
+anywhere else in the ROM touches `$4000`-`$7FFF`. The hardware vectors
+(`RESET=$C000`, `NMI=$C0C2`, `IRQ=$C000`) are all in bank 7, so bank 6 has
+no code entry -- consistent with what a static read alone can say.
 
-The `f6:E010` entry declared since the first commit was simply wrong: it
-labelled bank 6's Reset, but `$E010` is not even inside bank 6's own
-`$4000`-`$7FFF` address range, and correspondingly reached nothing. Caught
-by this pass and removed rather than left to keep producing zero.
+What a static read cannot say is whether anything *else* touches those
+bytes, and MAME's own address-space taps see MARIA's DMA the same way
+they see a CPU read: both cross the same bus. Tapping every read of
+`$4000`-`$7FFF` across `run-02`'s 23,985 frames (three tracks) counted
+**43,626,255 reads, touching 13,193 of the bank's 16,384 bytes** -- 80% of
+it, at roughly 1,800 reads per frame, every frame, for the entire session.
+That is not a residual or a coincidence; it is MARIA drawing from this
+bank continuously. **Bank 6 is graphics, confirmed live rather than
+guessed from its dithered-bitmap appearance** -- the earlier note said as
+much from shape alone, and this is what turns it from a guess into a
+finding.
 
-By inspection its content looks like dithered bitmap patterns
-(`$C0,$C0,$30,$0C...`, runs of `$55`/`$AA`), which fits graphics data --
-plausibly the hill terrain this game adds over Pole Position II -- but
-nothing traced references it yet, so this is a guess from shape rather
-than a finding. The earlier `$7878`/`$00B0` self-modifying-code trail
-(fixed bank 6 holding a constant pointer to a RAM stub) is the one lead
-into it and is still open.
+Along the way, the `f6:E010` entry declared since the first commit was
+caught as simply wrong: it labelled bank 6's Reset, but `$E010` sits
+outside bank 6's own `$4000`-`$7FFF` range entirely and reached nothing
+the whole time. Removed.
+
+The `$7878`/`$00B0` stub (a constant pointer living in bank 6, resolving
+to a RAM stub -- see above) is still the one lead into bank 6 as anything
+other than a DMA source, and is still open.
