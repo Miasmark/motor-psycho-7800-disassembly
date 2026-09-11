@@ -21,24 +21,29 @@ $C000-$FFFF  fixed  -> ROM bank 7 (file offset $1C000-$1FFFF)
 
 | Bank | Space | Bytes | Instructions | % | was |
 |------|-------|-------|--------------|----|-----|
-| 7 | f7 | 10,047 | 4,589 | 61.3% | 58.2% |
-| 5 | b5 | 1,785 | 832 | 10.9% | 9.4% |
-| 0 | b0 | 1,458 | 679 | 8.9% | 4.3% |
+| 7 | f7 | 11,065 | 5,036 | 67.5% | 61.3% |
+| 5 | b5 | 1,947 | 906 | 11.9% | 10.9% |
+| 0 | b0 | 1,583 | 734 | 9.7% | 8.9% |
 | 2 | b2 | 1,325 | 644 | 8.1% | 8.1% |
-| 1 | b1 | 304 | 143 | 1.9% | 1.9% |
+| 1 | b1 | 339 | 158 | 2.1% | 1.9% |
 | 3,4,6 | - | 0 | 0 | 0% | 0% |
 
-**Total traced:** 14,919 bytes / 6,887 instructions (22.8%), up from 13,405.
+**Total traced:** 16,259 bytes / 7,478 instructions (24.8%), up from 14,919.
 Reassembly is byte-identical across all six emitted spaces.
 
-The gain came from two things, both described in
-[`docs/DISCOVERY.md`](docs/DISCOVERY.md): each switched bank opens with a
-**jump table** the tracer can only follow one entry of, and five **indirect
-jumps through RAM pointers** whose targets were read off a live run. The
-second needs care -- the bank recorded when a pointer is written is not
-necessarily the bank mapped when it is jumped through, and 26 candidates
-attributed to bank 3 that way produced 27 instructions between them, so
-bank 3 is deliberately left out rather than filed as fact.
+Two full-track recordings (`run-01.inp`, `run-02.inp`, all four tracks
+between them) let the nine known indirect jumps be sampled properly this
+time -- a read tap on the `JMP` instruction itself, catching the bank
+register and the vector's value at the instant of the jump, rather than
+inferring it from when the pointer was last written. That settled the
+question the previous pass left open: **neither bank 3 nor bank 4 is ever
+a jump target across either recording**, so they hold data, not code --
+plausibly per-track tables, consistent with their ~40% single-value fill.
+It also corrected a wrong turn: the input-mirroring code in bank 7 that
+looked like the controller reader barely changes across 270 seconds of
+continuous driving, because it turns out to be **controller 2's optional
+response-time adjustment**, not player 1's steering. See
+[`docs/DISCOVERY.md`](docs/DISCOVERY.md) for both.
 
 ## Free Space
 
@@ -67,10 +72,14 @@ untraced bank or installed via RAM vector.
 
 ## Next Steps
 
-1. Resolve bank 3 properly: sample the bank register at the moment of the
-   `JMP`, not when the pointer is written. Needs an execution breakpoint at
-   the five jump sites or a read-back of the bank register.
-2. Add the remaining unresolved bank-switch targets to `entries`
+1. Find player 1's actual controls -- steering, gear, accelerate, jump.
+   Bank 0's controller code is ruled out (it is controller 2's UI); the
+   IRQ-driven vector chain at `$26A8`-`$26AC` is the likelier home now
+   that its dispatch is visible.
+2. Read bank 6 (`$4000`-`$7FFF`, fixed), entirely unexamined past its
+   reset vector, and the likely home of whatever gets installed at the
+   RAM stub `$00B0` sees jumped to from `$7878`.
+3. Test banks 3 and 4 as per-track data against the four known tracks.
 2. Trace the DLI chain via `JMP ($004A)` / `JMP ($004C)` / `JMP ($006C)`
 3. Record gameplay to capture audio and identify untraced routines
 4. Analyze the most-referenced RAM addresses for game state

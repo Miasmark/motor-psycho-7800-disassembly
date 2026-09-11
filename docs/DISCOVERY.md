@@ -231,3 +231,123 @@ b1   304  1.9%      b5 1785 10.9%
 is genuinely mapped and the switched banks are not: banks 3, 4, 6 and 7
 still stand at zero, and the graphics-heavy banks may never hold much code
 to find.
+
+
+## Two full-track recordings, and following the code for real
+
+`run-01.inp` (270s, first track) and `run-02.inp` (each of the other
+tracks) are the first live sessions this project has had. Pole Position II
+was suggested as a reference for a reason worth taking seriously: same
+studio-era 7800 driving game, and it turned out to share real architecture
+-- an indirect-jump/vector chain in the fixed bank driving a display list,
+the same shape as PP2's own "display-interrupt handler table". The manual
+(atariage.com/manual_html_page.php?SoftwareID=2171) gave the numbers to
+check claims against: Turn response 1-12, Straighten response 1-25, no
+brakes, no qualifying lap, a jump button.
+
+### The bank-7 input mirror was the wrong lead
+
+Bank 7 has `sub_F1A9`/`sub_F1BA`, which read `INPT0`/`INPT1`/`SWCHA` and
+mirror them into `ram_26A3`-`ram_26A5`. A probe watching that mirror for
+270 seconds of continuous driving found almost no changes -- every
+transition occurred exactly once, which is what a value read once at boot
+looks like, not a car being steered the whole way round a track.
+
+Tapping the hardware registers directly, with the reading PC recorded,
+settled it: `sub0_858C` in **bank 0** reads `SWCHA` on 92.5% of frames --
+essentially every frame -- against a handful of one-off reads everywhere
+else. That is gameplay, not the bank-7 mirror. The lesson is the same one
+Food Fight's vectors taught: a routine that stores an input value is not
+necessarily the routine driving the game with it, and the way to tell is
+to watch the hardware register's actual readers, not a RAM copy of it.
+
+### Bank 0's controller code is the *optional second controller*, not steering
+
+Reading further: `sub0_858C` debounces `SWCHA`, testing `AND #$0F` -- the
+**low** nibble only, which is controller 2. `sub0_85B1` decodes that
+nibble's four direction bits into a signed (X, Y) pair with four
+`LSR`/`BCC` steps. `sub0_8478` (X axis) adds the delta to `ram_26E0`,
+clamped to `$0D` (13); `sub0_84C8`'s sibling path (Y axis) clamps `ram_26E1`
+to `$1A` (26). 13 and 26 states are exactly the manual's Turn (1-12) and
+Straighten (1-25) ranges, off by the usual 1-indexed-display /
+0-indexed-internal difference. So this entire tree --
+`ram_26E0`/`TurnResponse`, `ram_26E1`/`StraightenResponse`,
+`sub0_8580`/`Ctrl2_LatchInit`, `sub0_858C`/`Ctrl2_ReadDebounced`,
+`sub0_85B1`/`Ctrl2_DecodeAxes` -- is the manual's "Right Controller
+(Optional)" response-time adjustment, not the driver's own controls.
+Genuinely player-1 steering, gear and the jump button are still open.
+
+### The fixed-bank vector chain, and a decisive answer on bank 3
+
+`f7:C0C3` is `JMP ($006C)`, called from inside the IRQ handler
+(`sub_C272`...`sub_C293`, ending `RTI`), alongside three more in the same
+handler: `f7:C299 JMP ($26A8)`, `f7:C29C JMP ($26AA)`, `f7:C29F
+JMP ($26AC)`. Together with the three vectors already known
+(`$4A`/`$4C` x3/`$6C`), that is nine indirect jumps, all through RAM
+pointers a static tracer cannot resolve.
+
+`tools/probe-vectors2.lua` samples all nine properly this time: a read
+tap on the `JMP` instruction's own address, firing on the opcode fetch,
+reading the bank register and the vector's current value at that instant.
+No inference about what the bank was earlier.
+
+Across both full-track recordings the result is clean and, this time,
+unambiguous. The switched-bank targets are:
+
+```
+bank 0:  $ADCE $ADD1 $ADD4 $ADD7 $ADDA $ADDD $ADE0     (7-slot table)
+bank 1:  $B003 $B006 $B009                              (3-slot table)
+bank 5:  $B7FA $B818 $B8B8
+```
+
+Every other resolution across both sessions -- the great majority of all
+samples -- lands in the fixed bank ($C000 and up), regardless of which
+bank happened to be switched in at the time; that "bank" is incidental,
+selected for some other reason, and irrelevant to where the jump goes.
+Declaring the fixed-bank table (`$C083`-`$C0BF`, 21 slots stepping by 3 --
+another jump table, the same shape as bank 0 and bank 1's own tables) plus
+the individual targets under the other vectors took bank 7 from 61.3% to
+67.5%.
+
+**Neither bank 3 nor bank 4 is ever the target of any of the nine jumps,
+across two full-track sessions covering all four tracks.** That resolves
+what the last session left open the honest way: not "still unresolved",
+but a real negative result from better data. Combined with their ~40%
+single-value fill (measured before), banks 3 and 4 hold data -- plausibly
+per-track tables, which would fit: four tracks, and hills are one of this
+game's additions over Pole Position II.
+
+### One vector resolves itself from the ROM alone
+
+`f7:C6DC JMP ($7878)` looked like a tenth case needing a live probe. It is
+not: `$7878`/`$7879` sit inside **fixed bank 6** (`$4000`-`$7FFF`,
+otherwise unexamined -- only its reset vector is declared) and hold the
+constant bytes `$B0 $00`, so the jump always resolves to `$00B0`. That is
+zero page, not any ROM bank: a small relocatable stub is evidently
+installed there at startup and jumped to via a fixed, hard-coded ROM
+pointer. Confirmed by reading the ROM file directly at that offset rather
+than by watching it run. Bank 6 itself is still unexamined past its reset
+vector and is an obvious next target.
+
+### Where this leaves it
+
+```
+b0  1583  9.7%      b2 1325  8.1%      f7 11065  67.5%
+b1   339  2.1%      b5 1947 11.9%
+```
+
+16,259 of 65,536 mapped bytes (24.8%), up from 14,919, all six emitted
+spaces (b0, b1, b2, b5, f6, f7) reassembling byte-identically.
+
+### Open, in rough order of promise
+
+1. **Player 1's actual controls** -- steering, gear, accelerate, jump.
+   Bank 0's controller code is ruled out (it is controller 2's UI). The
+   IRQ-driven vector chain at `$26A8`/`$26AA`/`$26AC` is the most likely
+   home for per-frame physics, now that its dispatch is visible; its
+   default targets `$FE68`/`$FE7A` are declared and worth reading next.
+2. **Bank 6**, entirely unexamined past the reset vector, and the likely
+   home of whatever gets installed at `$00B0`.
+3. **Banks 3 and 4** as per-track data -- worth testing against the
+   "four tracks" structure directly, the way PP2's track format was
+   decoded.

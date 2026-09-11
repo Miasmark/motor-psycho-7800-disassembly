@@ -83,16 +83,108 @@
     "b5:B5C2",
     "b5:B818",
     "b5:B7FA",
-    "b5:B59A"
+    "b5:B59A",
+    "b0:ADCE",
+    "b0:ADD1",
+    "b0:ADD4",
+    "b0:ADD7",
+    "b0:ADDA",
+    "b0:ADDD",
+    "b0:ADE0",
+    "b1:B003",
+    "b1:B006",
+    "b1:B009",
+    "b5:B8B8",
+    "f7:C089",
+    "f7:C08C",
+    "f7:C08F",
+    "f7:C095",
+    "f7:C098",
+    "f7:C09B",
+    "f7:C0A1",
+    "f7:C0A4",
+    "f7:C0A7",
+    "f7:C0AA",
+    "f7:C0AD",
+    "f7:C0B0",
+    "f7:C0B3",
+    "f7:C0B6",
+    "f7:C0B9",
+    "f7:C0BC",
+    "f7:C0BF",
+    "f7:EB66",
+    "f7:EB78",
+    "f7:EB91",
+    "f7:EB9E",
+    "f7:EC20",
+    "f7:EC32",
+    "f7:EC3B",
+    "f7:EC44",
+    "f7:EC47",
+    "f7:F9D0",
+    "f7:FA0C",
+    "f7:FD25",
+    "f7:FD53",
+    "f7:FD63",
+    "f7:FE68",
+    "f7:FE7A"
   ],
-  "ram_vectors": [],
+  "ram_vectors": [
+    [
+      "0x4A",
+      "0x4B"
+    ],
+    [
+      "0x4C",
+      "0x4D"
+    ],
+    [
+      "0x6C",
+      "0x6D"
+    ],
+    [
+      "0x26A8",
+      "0x26A9"
+    ],
+    [
+      "0x26AA",
+      "0x26AB"
+    ],
+    [
+      "0x26AC",
+      "0x26AD"
+    ]
+  ],
   "bankat": {},
   "labels": {
     "f6:E010": "Reset",
     "f7:C000": "ENTRY_ResetBank7",
-    "f7:C0C2": "ENTRY_NmiBank7"
+    "f7:C0C2": "ENTRY_NmiBank7",
+    "f7:C272": "NmiTail",
+    "f7:C293": "IrqExit",
+    "f7:C299": "VEC26A8_Dispatch",
+    "f7:C29C": "VEC26AA_Dispatch",
+    "f7:C29F": "VEC26AC_Dispatch",
+    "b0:8580": "Ctrl2_LatchInit",
+    "b0:858C": "Ctrl2_ReadDebounced",
+    "b0:85B1": "Ctrl2_DecodeAxes",
+    "b0:8478": "Ctrl2_AdjustTurnResponse",
+    "b0:84C8": "Ctrl2_InitResponseTimes"
   },
-  "ram": {},
+  "ram": {
+    "6A": "Ctrl2_ChangedMaskLo",
+    "6B": "Ctrl2_ChangedMaskHi",
+    "26E0": "TurnResponse",
+    "26E1": "StraightenResponse",
+    "26E2": "Ctrl2_DebounceTimer",
+    "26E3": "Ctrl2_SwchaPrev",
+    "26A3": "Ctrl1_Inpt0Mirror",
+    "26A4": "Ctrl1_Inpt1Mirror",
+    "26A5": "Ctrl1_SwchaMirror",
+    "26A8": "VecIrqA",
+    "26AA": "VecIrqB",
+    "26AC": "VecIrqC"
+  },
   "comments": {},
   "headers": {},
   "blocks": []
