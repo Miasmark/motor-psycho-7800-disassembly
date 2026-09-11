@@ -443,19 +443,56 @@ and 5, clustered at each transition). And `$00B0` genuinely is fetched as
 an opcode -- 25,844 times in one session -- so it is real, executed code,
 not a dead pointer.
 
-The caller is `sub_D9B4`/`sub_D9E4` (`f7:$D9B4`), a small loop that walks a
-table (`dat_D940`, stride 6 bytes: a 16-bit flag/count then two 16-bit
-cells) and, for each nonzero entry, installs values into `ram_004A`/`004B`
-and `ram_004C`/`004D` -- **the same two RAM-vector pairs** `f7:EC69` and
-`f7:FA44`/`FD13`/`b5:B7F7` dispatch through elsewhere. The one real row in
-that table loads `$C71E` (real bank-7 code) as one vector and `$259D` (a
-plain RAM address, not code) as the other, with a count of `$14` (20)
-alongside. `sub_C6DC`'s `JMP ($7878)`/`$00B0` stub is called from inside
-this same installer, which is why it is rare: it belongs to
-track/object-table setup at a state transition, not to the per-frame
-physics loop.
+The caller is `sub_D9B4`/`sub_D9E4` (`f7:$D9B4`), and reading `sub_D9E4`
+itself corrects last session's framing of it: it is not installing jump
+vectors. It is a generic `memcpy(dst, src, count)` --
 
-What `$C71E` and the 20-count buffer at `$259D` actually do is still open.
+    LDA (ram_004A),Y   ; source[Y]
+    STA (ram_004C),Y   ; dest[Y]
+    INY / BNE loop ...  (plus a page counter for >256-byte copies)
+
+-- and `ram_004A`/`004B`/`004C`/`004D` are its source/dest pointer pair for
+*this* call path only. They are reused zero-page cells: elsewhere (`f7:EC69`,
+`f7:FA44`/`FD13`, `b5:B7F7`) the same four bytes really are dispatched
+through as `JMP (ram_004A)`/`JMP (ram_004C)` DLI vectors -- but that is a
+different subsystem borrowing the same scratch space, not evidence about
+what `sub_D9E4` does with them. `sub_D9E4` is called directly (bypassing
+the table walk) from `b0:B024`, `b1:B135` and `b2:BE8E`, each bank setting
+up its own source/dest/count first -- it is a shared utility, not specific
+to this one caller.
+
+`sub_D9B4` walks `dat_D940` (stride 6 bytes: count-lo, count-hi, src-lo,
+src-hi, dst-lo, dst-hi) and stops at the first all-zero row -- row 1 is
+`00,00`, so only row 0 ever runs. Row 0: count `$0014` (20), src `$C71E`,
+dst `$259D`. So the whole mechanism is: **copy 20 bytes from `$C71E` to
+`$259D`, once, at a state transition** (the same transition that reaches
+the `$00B0` stub, called from inside this same installer). `sub_C6DC`'s
+`JMP ($7878)`/`$00B0` stub being rare (4-5 hits/session) is explained the
+same way: track/object setup, not the per-frame loop.
+
+That 20-byte destination turns out to be transient. Tapping `$259D-$25B0`
+across `run-01` (16,218 frames) found 354 writes -- not one copy, but
+**about 18 separate bulk fills**, each writing all 20 bytes to a single
+repeated value (all 20 bytes `$0F`, then later all 20 `$69`, and so on).
+The effective address in each write is `$2500 + Y` with `Y` sweeping
+`$9D` down to `$B0` -- i.e. `$259D-$25B0` is not a dedicated buffer at all,
+it is one 20-byte slice of a larger table based at `$2500`, and a second
+register (seen as `$05`, then `$04`, ...) selects *which* 20-byte slice
+gets the fill. That shape -- a fixed-size record, a handful of slot
+indices, one fill value per slot -- reads as per-object state being reset
+(most plausibly per-opponent-bike, given the manual's roster), with the
+`$C71E` copy supplying only the very first slot's boot-time default before
+this routine starts overwriting it.
+
+One honest gap: the instruction actually issuing these fills was not
+pinned down. MAME's debugger consistently reports `CURPC=$F902` for every
+one of the 354 writes, but `$F902` statically disassembles as the tail of
+`STA ram_242E,X` (`f7:$F900-$F902`) -- an instruction that cannot write to
+`$2500+Y`. Chasing this further (a debugger instruction trace) needs
+`-debug`, which the Lua `cpu.debug` interface isn't exposed without; that
+was not attempted. So the *effective address and fill pattern* are
+live-confirmed; the *exact opcode* producing them is not, and is flagged
+here rather than guessed at.
 
 ### Bank 6: confirmed graphics, by the most direct test there is
 
