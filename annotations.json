@@ -11,7 +11,6 @@
     "Coverage so far: ~24KB of 64KB traced"
   ],
   "entries": [
-    "f6:E010",
     "f7:C000",
     "f7:C0C2",
     "b0:8000",
@@ -157,7 +156,6 @@
   ],
   "bankat": {},
   "labels": {
-    "f6:E010": "Reset",
     "f7:C000": "ENTRY_ResetBank7",
     "f7:C0C2": "ENTRY_NmiBank7",
     "f7:C272": "NmiTail",
@@ -169,7 +167,10 @@
     "b0:858C": "Ctrl2_ReadDebounced",
     "b0:85B1": "Ctrl2_DecodeAxes",
     "b0:8478": "Ctrl2_AdjustTurnResponse",
-    "b0:84C8": "Ctrl2_InitResponseTimes"
+    "b0:84C8": "Ctrl2_InitResponseTimes",
+    "f7:F6ED": "Player1SteerRead",
+    "f7:F702": "Player1SteerScale",
+    "b0:AF3D": "ObjKindSwitch"
   },
   "ram": {
     "6A": "Ctrl2_ChangedMaskLo",
@@ -183,7 +184,16 @@
     "26A5": "Ctrl1_SwchaMirror",
     "26A8": "VecIrqA",
     "26AA": "VecIrqB",
-    "26AC": "VecIrqC"
+    "26AC": "VecIrqC",
+    "2643": "SampleIndex",
+    "2644": "SwchaSampleBufA",
+    "264B": "SwchaSampleBufB",
+    "0044": "SampleBufSelect",
+    "0051": "Player1SteerScaled",
+    "0155": "Player1SteerAccum",
+    "014D": "Player1SteerSign",
+    "0192": "ObjKind",
+    "26D9": "ObjKindState"
   },
   "comments": {},
   "headers": {},

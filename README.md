@@ -31,6 +31,17 @@ $C000-$FFFF  fixed  -> ROM bank 7 (file offset $1C000-$1FFFF)
 **Total traced:** 16,259 bytes / 7,478 instructions (24.8%), up from 14,919.
 Reassembly is byte-identical across all six emitted spaces.
 
+Three things asked for from these recordings, all found and in
+[`docs/DISCOVERY.md`](docs/DISCOVERY.md): **player 1's steering**, a
+7-sample-per-frame `SWCHA` poll inside the NMI handler feeding a scale
+factor the response-time UI configures; **banks 3 and 4**, which turned
+out to be per-*object* data rather than per-track -- a 4-entry table names
+which bank holds which of the manual's four obstacle kinds, two per bank,
+explaining why neither is ever a jump target; and **bank 6**, confirmed
+unreached by anything traced (the hardware vectors all point into bank 7),
+which also caught a stale annotation -- `f6:E010` was never a valid
+address inside that bank at all.
+
 Two full-track recordings (`run-01.inp`, `run-02.inp`, all four tracks
 between them) let the nine known indirect jumps be sampled properly this
 time -- a read tap on the `JMP` instruction itself, catching the bank
@@ -72,14 +83,13 @@ untraced bank or installed via RAM vector.
 
 ## Next Steps
 
-1. Find player 1's actual controls -- steering, gear, accelerate, jump.
-   Bank 0's controller code is ruled out (it is controller 2's UI); the
-   IRQ-driven vector chain at `$26A8`-`$26AC` is the likelier home now
-   that its dispatch is visible.
-2. Read bank 6 (`$4000`-`$7FFF`, fixed), entirely unexamined past its
-   reset vector, and the likely home of whatever gets installed at the
-   RAM stub `$00B0` sees jumped to from `$7878`.
-3. Test banks 3 and 4 as per-track data against the four known tracks.
+1. Decode `Player1SteerAccum` (`$0155`) against actual steering/gear
+   behaviour -- the pipeline is found, its output is not yet read as a
+   number.
+2. Confirm which of the four object kinds (`ObjKind` 0-3, banks 3/4) is
+   which of the manual's enemy bike / arrow sign / cone / ramp.
+3. Bank 6 is unreached by anything traced; the one lead in is the
+   `$7878`->`$00B0` self-modifying-code stub, still open.
 2. Trace the DLI chain via `JMP ($004A)` / `JMP ($004C)` / `JMP ($006C)`
 3. Record gameplay to capture audio and identify untraced routines
 4. Analyze the most-referenced RAM addresses for game state

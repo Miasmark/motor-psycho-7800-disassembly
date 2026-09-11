@@ -351,3 +351,77 @@ spaces (b0, b1, b2, b5, f6, f7) reassembling byte-identically.
 3. **Banks 3 and 4** as per-track data -- worth testing against the
    "four tracks" structure directly, the way PP2's track format was
    decoded.
+
+
+## The three open items, followed up
+
+### Player 1's controls: found
+
+Bank 0's controller code was ruled out as controller 2's UI. Player 1's
+own steering runs through the fixed-bank interrupt handler examined for
+the vector chain: `sub_C20D` (entered from NMI at `$C0C2`) reads `SWCHB`
+first, for edge-detecting Reset/Select/Pause -- that is what dispatches
+through `VecIrqA`/`VecIrqB`/`VecIrqC` and the mode-switching code
+(`sub_FEAE`/`sub_FEC0`/`sub_FED2`, which bank-switch through 1, 0, 5, 2 in
+turn). Past that, the same handler runs a **7-sample-per-frame poll of
+`SWCHA`** -- `LDX ram_0042; CPX #$07` -- into one of two double-buffered
+7-byte arrays (`ram_2644`/`ram_264B`, selected by `ram_0044`), which is the
+real, continuous joystick oversampling a driving game wants for smooth
+turning.
+
+The consumer is `sub_F6ED`/`sub_F702` (`Player1SteerRead`/
+`Player1SteerScale`): it reads the buffer, and combines it with
+`ram_26E6`-`ram_26E9` -- the *same* cells controller 2's response-time UI
+scales its settings into. So the two subsystems meet exactly where
+expected: controller 2 configures how sharply the car answers the stick
+(Turn 1-12, Straighten 1-25), and this routine applies that scale to
+player 1's actual joystick sample on every frame.
+
+Confirmed live rather than assumed: across 270 seconds of continuous
+driving, `Player1SteerScaled` (`ram_0051`) was written 197,228 times with
+**256 distinct values** and `Player1SteerAccum` (`ram_0155`) 17,688 times
+with 128 distinct values -- both about as active as a continuous
+steering/lean state can look, against the bank-7 mirror's one write per
+session that started this whole line of investigation.
+
+`ram_0192`/`ObjKind` was found along the way, in the same bank-0 region:
+`AND #$03` (four values) selects between four obstacle kinds, matching the
+manual's enemy bikes / arrow signs / cones / ramps, and its consumer
+(`sub0_AF3D`/`ObjKindSwitch`) resets a per-kind state cell on change. This
+is the thread that led to the answer on banks 3 and 4, below.
+
+### Bank 3 and 4: found -- object data, not per-track data
+
+The per-track guess was reasonable and wrong. `dat_C2EA` at `f7:$C2EA` is a
+flat 4-byte table: `{$03, $03, $04, $04}`. Indexed by `ObjKind` (0-3) at
+`sub_DB65`/`sub_DBC1`, it names which bank to switch to before reading that
+object's data -- so **kinds 0 and 1 live in bank 3, kinds 2 and 3 in bank
+4**. Two obstacle types per bank, out of the manual's four (enemy bike,
+arrow sign, cone, ramp).
+
+That is also the reason neither bank was ever a `JMP` target across two
+full-track recordings: their content is read with plain absolute-indexed
+`LDA`, addressed from code that lives entirely in bank 7, never entered as
+code in its own right. The probe result from last session was correct and
+this explains *why* rather than changing it.
+
+### Bank 6: unreached, and one stale annotation caught
+
+Bank 6 (`f6`, fixed at `$4000`-`$7FFF`) shows **zero instructions reached**
+by the tracer, and a grep across every other bank's listing finds not one
+`JSR`/`JMP` operand anywhere in `$4000`-`$7FFF`. The hardware vectors,
+read straight from the ROM rather than assumed, are `RESET=$C000`,
+`NMI=$C0C2`, `IRQ=$C000` -- all in bank 7. Bank 6 has no natural entry.
+
+The `f6:E010` entry declared since the first commit was simply wrong: it
+labelled bank 6's Reset, but `$E010` is not even inside bank 6's own
+`$4000`-`$7FFF` address range, and correspondingly reached nothing. Caught
+by this pass and removed rather than left to keep producing zero.
+
+By inspection its content looks like dithered bitmap patterns
+(`$C0,$C0,$30,$0C...`, runs of `$55`/`$AA`), which fits graphics data --
+plausibly the hill terrain this game adds over Pole Position II -- but
+nothing traced references it yet, so this is a guess from shape rather
+than a finding. The earlier `$7878`/`$00B0` self-modifying-code trail
+(fixed bank 6 holding a constant pointer to a RAM stub) is the one lead
+into it and is still open.
