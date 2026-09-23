@@ -521,3 +521,28 @@ the whole time. Removed.
 The `$7878`/`$00B0` stub (a constant pointer living in bank 6, resolving
 to a RAM stub -- see above) is still the one lead into bank 6 as anything
 other than a DMA source, and is still open.
+
+## The road renderer: 2-line zones, a ROM road image, and a double buffer
+
+Measured from outside while comparing racing engines for the Pole Position II
+project (its `docs/FINDINGS.md` has the side-by-side and the probes, in its
+`tools/`). Walked from a RAM dump at f2100 of `run-01.inp`.
+
+* **The road is one object per two-scanline zone**, 42-69 such zones a frame
+  depending on the hill. Each draws from a pre-drawn road image in ROM: the
+  graphics page steps down the screen (`$9E66`, `$9B66`, `$9966` ... `$7B5E`)
+  while the width grows from 1 byte to 20, so a zone's contribution is its x,
+  and the curve is nothing but those x values. Stripes appear to be the
+  palette flipped between 0 and 1 per zone rather than different graphics.
+* **Sky and mountains are character mode**, `CTRL = $50` (two-byte
+  characters), 16-line zones whose character strings point straight into ROM
+  (`$C3FE`, `$C52C`, `$C447` ...), so the backdrop costs nothing to compose.
+* **The DLL is double-buffered and flips at a variable rate.** `DPPH/DPPL`
+  alternate `$226C` / `$2383`, flipping every 3-7 frames -- 3:95 4:192 5:112
+  6:94 7:17 over 2,300 frames, 13.4 road updates a second. The spread says it
+  flips when the CPU finishes the back buffer, not on a fixed schedule. The
+  DLL start also moves by whole three-byte entries between buffers, which is
+  plausibly how the horizon rides up and down over hills without redrawing the
+  backdrop -- not yet confirmed.
+* 4-5 display interrupts and 5 `WSYNC`s a frame: no beam racing at all.
+  `MSTAT` is never polled; the frame wait is elsewhere.
