@@ -203,6 +203,13 @@ Adding the 25 that land in the fixed bank takes **f7 from 58.2% to 61.3%**
 -- those need no bank at all, so they are unambiguous. The bank-5 ones add
 **b5 9.4% -> 10.9%**.
 
+> **Corrected 2026-11-08:** not all of them. The probe logs every write to
+> `$4A`/`$4C`, and those cells are also the source and destination pointers
+> of the copy routines. Fourteen of the fixed-bank "targets" were copy
+> sources: HUD text, DLL tails, display lists and palette sets. They are now
+> removed from `entries`; see
+> [the corrections at the end](#corrections-2026-11-08-one-stick-sample-a-frame-and-the-phantom-entries).
+
 ### The catch, which cost a wrong answer
 
 The probe records the bank selected *when the pointer is written*. The jump
@@ -329,6 +336,13 @@ pointer. Confirmed by reading the ROM file directly at that offset rather
 than by watching it run. Bank 6 itself is still unexamined past its reset
 vector and is an obvious next target.
 
+> **Corrected 2026-11-08:** there is no tenth indirect jump. `f7:C6DC` is not
+> code: `$6C $78 $78 $6C` is four bytes of HUD text (`:`, blank, blank, `:`),
+> which a phantom entry made the tracer list as `JMP ($7878)`. Nothing in the
+> ROM branches, jumps or calls there. `$7878`/`$7879` do hold `$B0 $00`, but
+> that is two bytes of bank-6 graphics, not a pointer. See
+> [the corrections at the end](#corrections-2026-11-08-one-stick-sample-a-frame-and-the-phantom-entries).
+
 ### Where this leaves it
 
 ```
@@ -368,6 +382,20 @@ turn). Past that, the same handler runs a **7-sample-per-frame poll of
 7-byte arrays (`ram_2644`/`ram_264B`, selected by `ram_0044`), which is the
 real, continuous joystick oversampling a driving game wants for smooth
 turning.
+
+> **Corrected 2026-11-08:** it is **one** `SWCHA` sample per frame, not 7.
+> `ram_0042` is a frame counter, not a sample loop: `INC $42` runs once per
+> frame (`$C1C8`, in the display-interrupt handler that restarts the chain),
+> and `$C27A`-`$C290` stores one `SWCHA` read in slot `$42` while `$42` is
+> below 7. At each DLL flip `sub_D897` copies the count to `$43` and clears
+> `$42` (`$D8B3`-`$D8B9`). So the buffers hold one sample for each frame
+> since the last flip, up to 7. The game loop uses them one per physics
+> step: `b2:BECD` turns `$43` into the step count `$2642` (1-7, a zero or
+> 8+ count becomes 7), and the loop at `f7:F568`-`F58D` runs
+> `Player1SteerRead` once per step with `SampleIndex` (`$2643`) counting
+> up. It is a catch-up loop for a road that redraws every 3-7 frames, not
+> oversampling within a frame. This is read from the code, not measured
+> live. `ram_0042`/`0043` are now `FramesSinceFlip`/`FramesPerFlip`.
 
 The consumer is `sub_F6ED`/`sub_F702` (`Player1SteerRead`/
 `Player1SteerScale`): it reads the buffer, and combines it with
@@ -436,6 +464,15 @@ session rather than carrying the error into another one.
 
 ### The `$7878`/`$00B0` stub: found -- part of track/object setup, not a per-frame handler
 
+> **Corrected 2026-11-08:** there is no stub. `f7:C6DC` is HUD text, and
+> both probes behind this section used read taps, which fire on data reads
+> as well as opcode fetches. The 4-5 hits a session on `$C6DC` are
+> `MemCopy` reading the text when the HUD is set up, and the return
+> address on the stack is why the caller came out as `sub_D9B4`/`sub_D9E4`.
+> The table is not a one-row table either: each caller enters it at its own
+> script. The section is kept below as written. The corrections are
+> [at the end](#corrections-2026-11-08-one-stick-sample-a-frame-and-the-phantom-entries).
+
 Live taps answer the two questions a static read could not. `f7:C6DC` is
 reached only **4-5 times per session** (once per track load, roughly --
 run-01 has one track and 4 hits at the very end; run-02 has three tracks
@@ -484,6 +521,14 @@ indices, one fill value per slot -- reads as per-object state being reset
 `$C71E` copy supplying only the very first slot's boot-time default before
 this routine starts overwriting it.
 
+> **Corrected 2026-11-08:** `$C71E` is the 20-character message TIME
+> REMAINING BONUS, and `$259D` is a line of HUD text, not a per-object
+> record. Two lists in `HudDisplayLists` name it as character data
+> (`$9D $60 $25 ...` at `$C7E2` and `$C7FA`). The same line also gets BIKES
+> PASSED BONUS (`$259E`), and the LAP: script writes `$2595`. So the
+> per-opponent-bike reading does not fit. The fill values seen (`$0F`,
+> `$69` ...) and the `CURPC=$F902` puzzle are still unexplained.
+
 One honest gap: the instruction actually issuing these fills was not
 pinned down. MAME's debugger consistently reports `CURPC=$F902` for every
 one of the 354 writes, but `$F902` statically disassembles as the tail of
@@ -522,6 +567,10 @@ The `$7878`/`$00B0` stub (a constant pointer living in bank 6, resolving
 to a RAM stub -- see above) is still the one lead into bank 6 as anything
 other than a DMA source, and is still open.
 
+> **Corrected 2026-11-08:** that lead is gone. The "stub" was HUD text
+> listed as code (see the corrections at the end), so nothing points into
+> bank 6 as code, and the graphics reading stands alone.
+
 ## The road renderer: 2-line zones, a ROM road image, and a double buffer
 
 Measured from outside while comparing racing engines for the Pole Position II
@@ -546,3 +595,98 @@ project (its `docs/FINDINGS.md` has the side-by-side and the probes, in its
   backdrop -- not yet confirmed.
 * 4-5 display interrupts and 5 `WSYNC`s a frame: no beam racing at all.
   `MSTAT` is never polled; the frame wait is elsewhere.
+
+## Corrections 2026-11-08: one stick sample a frame, and the phantom entries
+
+A review of the techniques mined from this repository found two errors. Both
+were re-checked here against the ROM bytes and the regenerated listing before
+anything changed. Everything below is read from the code; nothing new was
+measured live.
+
+### Player 1's stick: one sample a frame, buffered between road updates
+
+The steering section above says the NMI takes 7 `SWCHA` samples a frame. It
+takes one:
+
+```
+f7:C1C8  INC $42          once a frame, in the handler that restarts the DLI chain
+f7:C27A  LDX $42 / CPX #$07 / BCS skip
+f7:C284  LDA SWCHA / STA $2644,X   (or $264B,X, by $44)
+f7:D8B3  LDA $42 / STA $43 / LDA #$00 / STA $42    at the DLL flip (sub_D897)
+```
+
+The road is redrawn every 3-7 frames (see the road renderer section), so the
+buffer collects one stick reading for each frame of the redraw. The main loop
+then runs one physics step for each of those frames, each step with its own
+frame's reading: `b2:BECD` makes the latched count the step count `$2642`
+(clamped to 1-7), and `f7:F568`-`F58D` loops `Player1SteerRead`, `sub_F7D0`,
+`sub5_BA9E` and `sub5_B7A2` that many times with `SampleIndex` counting up.
+So the handling advances one step for every frame, up to 7, while the screen
+updates only 9-20 times a second. The README
+had the same error and is corrected too. In `annotations.json`, `$0042` and
+`$0043` are now `FramesSinceFlip` and `FramesPerFlip`, with comments at the
+three sites.
+
+### The phantom entries were copy sources
+
+`annotations.json` had entries at `f7:C6D1`, `C6D4`, `C6D9`, `C6DC`, `C6E0`,
+`C703`, `C736`, `C73B`, `C746`, `C758` and `C794`, and nothing explained
+them. They came in with the first commit, from `tools/probe-vectors.lua`. That
+probe logs every write to the high bytes of `$4A`, `$4C` and `$6C` as a jump
+target. But `$4A`-`$4D` are also the source and destination pointers of the
+copy routines, so it logged copy sources as well. That is the same mistake
+the bank-3 candidates showed: a write to a pointer is not a jump through it.
+None of these addresses is a branch, jump or call target anywhere in the
+ROM. Each one is a source address in the copy code:
+
+- **`CopyScripts` (`dat_D940`)** is a set of copy scripts, rows of count
+  (word), source and destination, each script ending at a zero count.
+  `CopyScriptRun` (`sub_D9B4`) runs the script that starts at X and calls
+  `MemCopy` (`sub_D9E4`) for each row. The callers pass X = `$00`/`$08`
+  (`EBBD`, from `sub_EB91`/`sub_EB9E`), `$10` (`EBDF`), `$18` (`EDD1`),
+  `$30` (`EDA8`), `$5C` (`EE65`) and `$6C` (`F51F`). No call in the ROM
+  passes `$20`, `$28` or `$64`. The earlier reading that "only row 0 ever
+  runs" missed that each caller starts at its own script.
+- **`$C6D1`-`$C745` is HUD and message text**, not code. The font's codes are
+  `$50`-`$5F` for 0-9 and A-F (the table at `dat_C6C1` just before it), then
+  `$60` H, `$61` I, `$62` M, `$63` O, `$64` P, `$65` R, `$6A` S, `$6B` T,
+  `$6C` `:`, `$6D` L, `$6E` N, `$6F` G, `$70` K, `$71` U, `$72` V, `$73` X,
+  and `$78` blank. The strings: HI SCORE, SCORE, MPH, `:  :`, TIME:, LAP:,
+  FINISH, EXTRA TIME!, FINAL LAP, GAME OVER, BIKES PASSED BONUS, TIME
+  REMAINING BONUS, `00` and two more characters, TURN: and STRAIGHTEN:. The
+  last two match the HUD screenshot ("TURN: 10", "STRAIGHTEN: 20"). Script
+  `$30` copies the HUD labels into `$2560`-`$25D0`. The others hold the
+  messages.
+- **`$C6DC` is the `:  :` string**, whose bytes `$6C $78 $78` read as
+  `JMP ($7878)`. That is the whole of the `$00B0` stub story: the read taps
+  on `$C6DC` fired when `MemCopy` read the text at HUD setup, 4-5 times a
+  session, and not on an opcode fetch. `$7878` holding `$B0 $00` is a
+  coincidence of bank-6 graphics. The 25,844 reads of `$00B0` came from a
+  probe that is not in `tools/`. A read tap counts every data read, so the
+  number says nothing about code there.
+- **`$C746`, `$C758`, `$C76A`, `$C77C` are DLL tails.** Bank 2
+  (`b2:BE1C`-`BE8E`) puts one of the four on the end of the DLL it is
+  building, chosen by `$2543`, `$2547`, `SWCHB` bit 6 and `$26A1`, and copies
+  it with `MemCopy`. Their entries name the lists at `$25D4`-`$263A`.
+- **`$C794`-`$C800` is those display lists**: 109 bytes, which script `$6C`
+  copies to `$25D4`. They are 5-byte character-mode headers (`$60`) that
+  name the text lines at `$25xx`.
+
+The same probe also accounted for three more entries outside that range:
+`f7:D383`, `D39B` and `D3B3`. These are three of six 24-byte **palette
+sets** (`$D383`-`$D412`). `sub_D8E2` loads one through the pointers at
+`dat_D377` into `$4A`/`$4B`, copies it to `$017A`-`$0191` and sets `$0179`.
+Then `sub_D8FA`, called from the NMI at `$C277`, writes the set to
+`P0C1`-`P7C3` through the register list at `dat_C834`. They were listed as
+`BRK` and `ORA $05`.
+
+All fourteen entries are removed. The strings, the DLL tails, the display
+lists and the palette sets are labelled as data, with blocks where nothing
+else names them. `CopyScripts`, `CopyScriptRun` and `MemCopy` are named. The
+listing still reassembles byte for byte in all eight banks. Bank 7's traced
+code drops from 11,065 to 11,050 bytes (5,036 to 5,026 instructions). The
+lost bytes are exactly the ten phantom instructions.
+
+The probe headers in `tools/probe-vector-install.lua` and
+`tools/probe-vectors2.lua` still describe the `$00B0` stub. They are left as
+they were, as the record of what was run.

@@ -21,20 +21,26 @@ $C000-$FFFF  fixed  -> ROM bank 7 (file offset $1C000-$1FFFF)
 
 | Bank | Space | Bytes | Instructions | % | was |
 |------|-------|-------|--------------|----|-----|
-| 7 | f7 | 11,065 | 5,036 | 67.5% | 61.3% |
+| 7 | f7 | 11,050 | 5,026 | 67.4% | 61.3% |
 | 5 | b5 | 1,947 | 906 | 11.9% | 10.9% |
 | 0 | b0 | 1,583 | 734 | 9.7% | 8.9% |
 | 2 | b2 | 1,325 | 644 | 8.1% | 8.1% |
 | 1 | b1 | 339 | 158 | 2.1% | 1.9% |
 | 3,4,6 | - | 0 | 0 | 0% | 0% |
 
-**Total traced:** 16,259 bytes / 7,478 instructions (24.8%), up from 14,919.
+**Total traced:** 16,244 bytes / 7,468 instructions (24.8%), up from 14,919.
 Reassembly is byte-identical across all six emitted spaces.
+Corrected 2026-11-08: bank 7 was 11,065 bytes / 5,036 instructions until
+14 phantom entries were removed. They were copy sources (HUD text, DLL
+tails, display lists, palette sets), not code; see
+[`docs/DISCOVERY.md`](docs/DISCOVERY.md).
 
 Three things asked for from these recordings, all in
-[`docs/DISCOVERY.md`](docs/DISCOVERY.md): **player 1's steering**, a
-7-sample-per-frame `SWCHA` poll inside the NMI handler feeding a scale
-factor the response-time UI configures; **banks 3 and 4**, confirmed
+[`docs/DISCOVERY.md`](docs/DISCOVERY.md): **player 1's steering**, one
+`SWCHA` sample per frame taken inside the NMI handler and buffered until the
+next road update (up to 7), with each sample run through a scale factor the
+response-time UI configures (corrected 2026-11-08: this said 7 samples a
+frame, but `$42` counts frames, not samples); **banks 3 and 4**, confirmed
 *per-track* after a same-session correction -- a first reading called the
 selector `ObjKind` on the strength of `AND #$03` matching the manual's
 four obstacle kinds, and screenshotting every change of that cell showed
@@ -42,10 +48,10 @@ it only ever changes on the track-select screen, so it is `TrackSelect`
 and the bank table pairs two tracks per bank; and **bank 6**, confirmed
 unreached by anything traced (the hardware vectors all point into bank 7),
 which also caught a stale annotation -- `f6:E010` was never a valid
-address inside that bank at all. The `$7878`/`$00B0` self-modifying stub
-is also resolved: it belongs to a track/object-table installer
-(`sub_D9B4`), called a handful of times per session at track loads, not a
-per-frame handler. The HUD itself confirms `TurnResponse`/`StraightenResponse`
+address inside that bank at all. There is no `$7878`/`$00B0` stub
+(corrected 2026-11-08). `f7:C6DC` is four bytes of HUD text that a phantom
+entry listed as `JMP ($7878)`. `sub_D9B4` runs the copy scripts that put
+the HUD text and display lists in RAM. The HUD itself confirms `TurnResponse`/`StraightenResponse`
 outright -- it reads "STRAIGHTEN: 20" and "TURN: 10" on screen, live,
 matching those cells exactly rather than by numeric coincidence with the
 manual. And **bank 6 is confirmed graphics**, not guessed: tapping every
@@ -97,8 +103,10 @@ untraced bank or installed via RAM vector.
 1. Decode `Player1SteerAccum` (`$0155`) against actual steering/gear
    behaviour -- the pipeline is found, its output is not yet read as a
    number.
-2. What `$C71E` and the 20-entry buffer at `$259D` do -- the two values
-   the track/object installer sets up via the `$7878` stub.
+2. What writes the repeated fill values seen in the HUD text line at
+   `$259D` (corrected 2026-11-08: `$C71E` is the message TIME REMAINING
+   BONUS and `$259D` is a text line, not a per-object buffer; there is no
+   `$7878` stub).
 3. Bank 6 is **confirmed graphics** -- MARIA's own DMA reads it 43.6
    million times across one three-track session, 80% of its bytes
    touched -- but nothing yet says which visual element specifically.

@@ -25,8 +25,6 @@
     "b1:8000",
     "f7:FD44",
     "f7:F9E9",
-    "f7:C758",
-    "f7:C746",
     "f7:F9E2",
     "f7:C092",
     "f7:C09E",
@@ -36,18 +34,6 @@
     "f7:FD16",
     "f7:C086",
     "f7:C083",
-    "f7:D39B",
-    "f7:C794",
-    "f7:C6D9",
-    "f7:C6D1",
-    "f7:D383",
-    "f7:C73B",
-    "f7:C6DC",
-    "f7:C736",
-    "f7:D3B3",
-    "f7:C6D4",
-    "f7:C703",
-    "f7:C6E0",
     "b5:B3BE",
     "b5:B120",
     "b5:B370",
@@ -170,7 +156,14 @@
     "b0:84C8": "Ctrl2_InitResponseTimes",
     "f7:F6ED": "Player1SteerRead",
     "f7:F702": "Player1SteerScale",
-    "b0:AF3D": "TrackSelectChanged"
+    "b0:AF3D": "TrackSelectChanged",
+    "f7:C746": "HudDllTailA",
+    "f7:C758": "HudDllTailB",
+    "f7:C76A": "HudDllTailC",
+    "f7:C77C": "HudDllTailD",
+    "f7:D940": "CopyScripts",
+    "f7:D9B4": "CopyScriptRun",
+    "f7:D9E4": "MemCopy"
   },
   "ram": {
     "6A": "Ctrl2_ChangedMaskLo",
@@ -193,9 +186,139 @@
     "0155": "Player1SteerAccum",
     "014D": "Player1SteerSign",
     "0192": "TrackSelect",
-    "26D9": "TrackSelectState"
+    "26D9": "TrackSelectState",
+    "0042": "FramesSinceFlip",
+    "0043": "FramesPerFlip"
   },
-  "comments": {},
-  "headers": {},
-  "blocks": []
+  "comments": {
+    "f7:D9B4": "runs one copy script from CopyScripts at offset X, calling MemCopy per row (corrected 2026-11-08: not a one-row table, each caller starts at its own script)",
+    "f7:D9E4": "copy ($4E/$4F) bytes from ($4A) to ($4C). $4A-$4D are scratch here, the same cells other code dispatches through as DLI vectors",
+    "f7:C1C8": "once per frame, in the last handler of the display-interrupt chain: counts frames since the last DLL flip",
+    "f7:C27A": "one SWCHA sample per frame (corrected 2026-11-08, not 7 per frame): stored in slot FramesSinceFlip of the buffer SampleBufSelect picks, while fewer than 7 frames have passed",
+    "f7:D8B3": "at the DLL flip: latch the frame count for the main loop (b2:BECD makes it the step count $2642, 1-7) and restart it",
+    "f7:D8E2": "copy palette set Y/2 (dat_D377 pointers) to $017A-$0191 and flag it for the NMI. $4A/$4B are a copy source here, which the first vector probe logged as jump targets"
+  },
+  "headers": {
+    "f7:C6D1": "HUD and message text, not code (corrected 2026-11-08, see docs/DISCOVERY.md). Character codes: $50-$5F are 0-9 and A-F (the digit table just above), other letters by their own codes ($60 H, $61 I, $62 M, $63 O, $64 P, $65 R, $6A S, $6B T, $6D L, $6E N, $6F G, $70 K, $71 U, $72 V, $73 X), $6C ':', $78 blank. CopyScripts copies each string into the text-line RAM at $2560-$25C6. HI SCORE is 8 bytes and runs on into SCORE, which is also copied alone",
+    "f7:C6DC": "4 bytes ':', blank, blank, ':' copied to $258E. Not JMP ($7878): the earlier $00B0-stub reading came from listing these bytes as code (corrected 2026-11-08)",
+    "f7:C746": "DLL tails, not code (corrected 2026-11-08): bank 2 (b2:BE1C-BE8E) copies one of these four onto the end of the DLL it is building, through MemCopy. 3-byte DLL entries; the $25D4-$263A lists they name are the ones copied from HudDisplayLists. A is chosen when $2543 and $2547 bit 7 are clear and SWCHB bit 6 is clear, or bit 6 is set with $26A1 bit 7 set",
+    "f7:C758": "chosen when $2543 and $2547 bit 7 are clear, SWCHB bit 6 is set and $26A1 bit 7 is clear",
+    "f7:C76A": "chosen when $2543 bit 7 is clear and $2547 bit 7 is set",
+    "f7:C77C": "15 bytes (5 entries), chosen when $2543 bit 7 is set",
+    "f7:C794": "109 bytes of display lists ($6D), not code (corrected 2026-11-08): CopyScripts row X=$6C copies $C794-$C800 to $25D4. 5-byte character-mode headers (mode byte $60: extended, indirect) naming the text lines at $25xx, each list ending $00,$00",
+    "f7:D940": "copy scripts for CopyScriptRun: rows of count (word), source, destination; a zero count ends a script. Callers pick a script by X: $00 TIME REMAINING BONUS or $08 BIKES PASSED BONUS (EBBD, X from sub_EB91/sub_EB9E), $10 the bonus digits (EBDF), $18 GAME OVER (EDD1), $30 the HUD labels (EDA8), $5C LAP: (EE65), $6C the HUD display lists (F51F). No call in the ROM passes $20 (EXTRA TIME!), $28 (FINAL LAP) or $64 (FINISH)",
+    "f7:D383": "six 24-byte palette sets, not code (corrected 2026-11-08, see docs/DISCOVERY.md; D383, D39B and D3B3 were entries). sub_D8E2 picks one through the dat_D377 pointers (Y = 0, 2 ... 10) and copies it to $017A-$0191 with $0179 as the pending flag; sub_D8FA, from the NMI at $C277, writes them to P0C1-P7C3 through the register list at dat_C834+1"
+  },
+  "blocks": [
+    {
+      "loc": "f7:C6D1",
+      "len": 3,
+      "name": "Text_HiScore"
+    },
+    {
+      "loc": "f7:C6D4",
+      "len": 5,
+      "name": "Text_Score"
+    },
+    {
+      "loc": "f7:C6D9",
+      "len": 3,
+      "name": "Text_Mph"
+    },
+    {
+      "loc": "f7:C6DC",
+      "len": 4,
+      "name": "Text_ColonPair"
+    },
+    {
+      "loc": "f7:C6E0",
+      "len": 5,
+      "name": "Text_Time"
+    },
+    {
+      "loc": "f7:C6E5",
+      "len": 4,
+      "name": "Text_Lap"
+    },
+    {
+      "loc": "f7:C6E9",
+      "len": 6,
+      "name": "Text_Finish"
+    },
+    {
+      "loc": "f7:C6EF",
+      "len": 11,
+      "name": "Text_ExtraTime"
+    },
+    {
+      "loc": "f7:C6FA",
+      "len": 9,
+      "name": "Text_FinalLap"
+    },
+    {
+      "loc": "f7:C703",
+      "len": 9,
+      "name": "Text_GameOver"
+    },
+    {
+      "loc": "f7:C70C",
+      "len": 18,
+      "name": "Text_BikesPassedBonus"
+    },
+    {
+      "loc": "f7:C71E",
+      "len": 20,
+      "name": "Text_TimeRemainingBonus"
+    },
+    {
+      "loc": "f7:C732",
+      "len": 4,
+      "name": "Text_BonusDigits"
+    },
+    {
+      "loc": "f7:C736",
+      "len": 5,
+      "name": "Text_Turn"
+    },
+    {
+      "loc": "f7:C73B",
+      "len": 11,
+      "name": "Text_Straighten"
+    },
+    {
+      "loc": "f7:C794",
+      "len": 109,
+      "name": "HudDisplayLists"
+    },
+    {
+      "loc": "f7:D383",
+      "len": 24,
+      "name": "PaletteSet0"
+    },
+    {
+      "loc": "f7:D39B",
+      "len": 24,
+      "name": "PaletteSet1"
+    },
+    {
+      "loc": "f7:D3B3",
+      "len": 24,
+      "name": "PaletteSet2"
+    },
+    {
+      "loc": "f7:D3CB",
+      "len": 24,
+      "name": "PaletteSet3"
+    },
+    {
+      "loc": "f7:D3E3",
+      "len": 24,
+      "name": "PaletteSet4"
+    },
+    {
+      "loc": "f7:D3FB",
+      "len": 24,
+      "name": "PaletteSet5"
+    }
+  ]
 }
